@@ -1,0 +1,597 @@
+---
+title: "Income Inequality Analysis by Gender, Education, and Marital Status"
+author: "Yejin Park, Dhanya R Sangolli, Pratik Upadhyay, Jack Jarjourah"
+date: "2024-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(kableExtra)
+library(ggplot2)
+library(patchwork)
+library(broom)
+```
+
+## 1. Introduction: Data Processing and Summarization
+
+### Load and Process Data:
+
+In the code block below, we load the nlsy97 dataset and run basic cleaning, renaming, mutating and filtering.
+
+-   **Cleaning & Renaming:** For the sake of clarity, the study's original variable names were changed. For example: R0536300 → Gender
+-   **Variable Mutation:** Variables are given category labels, levels and groupings.
+-   **Data Filtering:** Redundant data is filtered, such as negative income values.
+
+```{r}
+# Load dataset
+nlsy97 <- read.csv("nlsy97.csv")
+
+# Clean and rename variables
+nlsy97_cleaned <- nlsy97 %>%
+  rename(
+    Income2017 = U2857200,    # Total income from wages and salary
+    Gender = R0536300,        # Gender
+    Education = T6657300,     # Highest degree received
+    MaritalStatus = U1852400  # Marital status
+  ) %>%
+  # Convert the `Education` column to a factor, mapping numeric codes to meaningful labels. 
+    # Levels:
+    # 0, 1: No Degree
+    # 2: High School Graduate
+    # 3: Associate's Degree
+    # 4: Bachelor's Degree
+    # 5, 6, 7: Graduate Degree
+  mutate(
+    Gender = factor(Gender, levels = c(1, 2), labels = c("Male", "Female")),
+    Education = factor(Education,
+      levels = c(0, 1, 2, 3, 4, 5, 6, 7),
+      labels = c(
+        "No Degree", "No Degree", "High School Graduate", 
+        "Associate's Degree", "Bachelor's Degree", 
+        "Graduate Degree", "Graduate Degree", "Graduate Degree"
+      )
+    ),
+# Map `MaritalStatus` codes to descriptive labels
+    MaritalStatus = factor(MaritalStatus,
+      levels = c(0, 1, 2, 3, 4),
+      labels = c("Never-married", "Married", "Separated", "Divorced", "Widowed")
+    ),
+    Income2017 = as.numeric(Income2017)
+  ) %>%
+  filter(!is.na(Income2017) & Income2017 > 0)
+
+# Summary of the cleaned data
+summary_stats <- nlsy97_cleaned %>%
+  group_by(Gender) %>%
+  summarise(
+    'Mean Income' = mean(Income2017, na.rm = TRUE), # Calculate the average income for each gender
+    'Median Income' = median(Income2017, na.rm = TRUE), # Calculate the median income for each gender
+    Count = n(),# Count the number of individuals in each gender group
+    .groups = "drop" # Count the number of individuals in each gender group
+  )
+
+# Display the summary table
+kable(summary_stats, caption = "Income Summary by Gender (2017)") %>% # Count the number of individuals in each gender group
+  kable_styling(full_width = FALSE) # Apply styling to make the table visually appealing and not stretch fully across the page
+
+```
+
+**Description/Discussion:** The table titled Income Summary by Gender (2017) highlights income differences between males and females. The average income for males is \$57,510.01, significantly higher than the average for females, \$41,565.00. Similarly, the median income for males is \$48,000, compared to \$35,000 for females, showing a clear income gap. With 2,607 males and 2,453 females in the dataset, this data suggests a noticeable income inequality between genders in 2017. This observation may result from various factors such as job roles, education, or systemic biases and invites further analysis to understand the root causes of this disparity.
+
+### Data Visualizations: Gender vs. Income
+
+To gain an overview of the two main variables we are working with, the following code block generates both a density and box plot.
+
+```{r}
+# Remove rows with non-finite Income2017 values
+nlsy97_cleaned_filtered <- nlsy97_cleaned %>%
+  filter(!is.na(Income2017) & is.finite(Income2017) & Income2017 >= 0)
+
+# Density plot: Visualizes the overall income distribution for males and females, showing overlapping patterns and peaks.
+ggplot(nlsy97_cleaned_filtered, aes(x = Income2017, fill = Gender)) +
+  geom_density(alpha = 0.5) +
+  labs(
+    title = "Income Distribution by Gender (2017)",
+    subtitle = "Density plot of income segmented by gender",
+    x = "Income (USD)",
+    y = "Density",
+    fill = "Gender"
+  ) +
+  scale_x_continuous(labels = scales::comma, limits = c(0, 150000)) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, face = "italic", hjust = 0.5),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+# Box plot: Highlights differences in median, spread, and outliers between genders, offering a clear view of income inequality.
+ggplot(nlsy97_cleaned_filtered, aes(x = Gender, y = Income2017, fill = Gender)) +
+  geom_boxplot(outlier.size = 1, outlier.shape = 21) +
+  labs(
+    title = "Income Distribution by Gender (2017)",
+    subtitle = "Boxplot representation of income segmented by gender",
+    x = "Gender",
+    y = "Income (USD)",
+    fill = "Gender"
+  ) +
+  scale_y_continuous(labels = scales::comma, limits = c(0, 150000)) +
+  scale_fill_brewer(palette = "Set2") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, face = "italic", hjust = 0.5),
+    axis.title = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+```
+
+**Description/Discussion:** - The summary table provides means, medians, and standard deviations of income by gender. - The boxplot visualizes the income distribution, highlighting disparities between genders. - The first figure (density plot) shows that males tend to earn higher incomes with greater variability compared to females, whose incomes are more concentrated at lower levels. Males also dominate higher-income. brackets, as indicated by the longer right tail of their distribution. - The second figure (boxplot) highlights that males have a higher median income, greater spread, and more high-income outliers than females. This reinforces the gender income gap seen in the density plot.
+
+## 2. Methodology
+
+#### i. How did you deal with missing values?
+
+Missing values were addressed by filtering out rows with invalid or missing data in key variables such as Income2017. Specifically, any entry with a missing income value, represented as NA or negative values, was excluded from the analysis. This approach ensures that the dataset used for the study is clean and reliable, which improves the robustness of the results. However, removing these rows reduces the sample size, which may limit the generalizability of the findings to the full population.
+
+#### ii. How did you deal with topcoded variables?
+
+The Income2017 variable is topcoded for the top 2% of earners at \$149,000. This means that any value above this threshold is replaced with the average of the top 2% of earners. This topcoding ensures privacy for high earners but underestimates the actual income disparity within the dataset. While this might slightly skew the analysis, particularly for studies focusing on income inequality at the upper extremes, the impact on gender-related income analysis is minimal because both genders are affected similarly by the topcoding.
+
+#### iii. Did you produce any tables or plots that you thought would reveal interesting trends but didn’t?
+
+Initial scatterplots of income versus marital status failed to show a strong correlation between marital status and income when analyzed in isolation. Similarly, the distribution of income across some specific education levels (e.g., “Less than High School”) showed large variability, making it difficult to draw definitive conclusions. These insights were ultimately excluded from the main findings to maintain clarity and focus on more significant trends.
+
+#### iv. What relationships did you investigate that don’t appear in your findings section?
+
+Several additional relationships were explored but not highlighted in the findings. These include:
+
+-   The interaction between marital status and education: Although analyzed, it showed minimal additional insight beyond the individual effects of these variables.
+-   Regional differences: Limited data availability on geographical factors rendered this investigation inconclusive.
+
+#### v. What’s the analysis that you finally settled on? What income and gender-related factors do you investigate in the final analysis?
+
+The final analysis focused on comparing male and female incomes across different education levels and marital statuses. These two categorical variables were selected because they provide meaningful context for understanding income disparity:
+
+-   *Education:* Higher education levels correlated with higher income, making it a crucial factor for analysis.
+-   *Marital Status:* Marriage showed a strong association with income, with married individuals generally earning more than other groups.
+
+Statistical tests (e.g., confidence intervals and hypothesis tests) were used to assess the significance of gender-based differences. A regression model was employed to quantify the impact of gender, education, and marital status on income.
+
+## 3. Analysis and Findings
+
+### 3.1 Tabular Summaries
+
+```{r}
+# Income by Gender and Education
+income_by_education <- nlsy97_cleaned %>%
+  group_by(Education, Gender) %>%
+  summarise(
+    MeanIncome = mean(Income2017, na.rm = TRUE),
+    MedianIncome = median(Income2017, na.rm = TRUE),
+    Count = n(),
+    .groups = "drop"
+  )
+
+# Create a styled table
+income_by_education %>%
+  kbl(
+    caption = "Income by Gender and Education",
+    col.names = c("Education Level", "Gender", "Mean Income", "Median Income", "Count"),
+    format = "html",
+    align = "c"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE
+  ) %>%
+  column_spec(3:4, bold = TRUE, color = "blue") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#4CAF50")
+```
+
+#### *Across all education levels, males earn more on average than females. However, higher education is associated with increased income for both genders.*
+
+```{r}
+# Income by Gender and Marital Status
+income_by_marital <- nlsy97_cleaned %>%
+  group_by(MaritalStatus, Gender) %>%
+  summarise(
+    MeanIncome = mean(Income2017, na.rm = TRUE),
+    MedianIncome = median(Income2017, na.rm = TRUE),
+    Count = n(),
+    .groups = "drop"
+  )
+
+# Create a table
+income_by_marital %>%
+  kbl(
+    caption = "Income by Gender and Marital Status",
+    col.names = c("Marital Status", "Gender", "Mean Income", "Median Income", "Count"),
+    format = "html",
+    align = "c"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE
+  ) %>%
+  column_spec(3:4, bold = TRUE, color = "darkgreen") %>%
+  row_spec(0, bold = TRUE, color = "white", background = "#FF5733")
+```
+
+#### *Married individuals earn more on average than other marital status groups, and the gender gap persists across all statuses.*
+
+**Description/Discussion:** The table shows that income increases with education for both genders, but males consistently earn more than females at all levels. The gender income gap widens with higher education, with males benefiting more significantly. For example, males with graduate degrees earn \$105,631 on average, compared to \$75,858 for females. These disparities highlight persistent gender income inequality despite educational attainment.
+
+3.2 Graphical Summaries Income by Gender and Education
+
+```{r}
+# Filter out rows with N/A for Gender, Education, or Marital Status
+nlsy97_cleaned <- nlsy97_cleaned %>%
+  filter(!is.na(Gender) & !is.na(Education) & !is.na(MaritalStatus))
+
+# Summarize income by gender and education
+education_income <- nlsy97_cleaned %>%
+  group_by(Education, Gender) %>%
+  summarise(
+    MeanIncome = mean(Income2017, na.rm = TRUE),
+    MedianIncome = median(Income2017, na.rm = TRUE),
+    Count = n(),
+    .groups = "drop"
+  )
+
+# Visualize income by gender and educationggplot(education_income, aes(x = Education, y = MeanIncome, fill = Gender)) +
+ggplot(education_income, aes(x = Education, y = MeanIncome, fill = Gender)) +
+  geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.9) +
+  geom_text(
+    aes(label = paste0("$", format(round(MeanIncome, 0), big.mark = ","))),
+    position = position_dodge(0.8),
+    vjust = -0.5,
+    size = 3.5,
+    color = "black"
+  ) +
+  labs(
+    title = "Average Income by Gender and Education Level",
+    subtitle = "Data from NLSY97 Survey (2017)",
+    x = "Education Level",
+    y = "Mean Income (USD)",
+    fill = "Gender"
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) + # Add space above bars
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, face = "italic", hjust = 0.5),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.y = element_line(color = "gray80", linetype = "dashed")
+  )
+```
+
+**Description/Discussion:** (Income by Gender and Marital Status) The chart shows that income increases with education for both genders, but males consistently earn more than females at every level. The income gap widens with higher education, with males earning \$105,631 on average at the graduate level compared to \$76,110 for females. While education boosts income for both, males benefit more significantly, highlighting persistent gender income disparities across all education levels.
+
+#### **Income by Gender and Marital Status**
+
+```{r}
+# Filter out rows with N/A for Gender, Education, or Marital Status
+nlsy97_cleaned <- nlsy97_cleaned %>%
+  filter(!is.na(Gender) & !is.na(Education) & !is.na(MaritalStatus))
+
+# Summarize income by gender and marital status
+marital_income <- nlsy97_cleaned %>%
+  group_by(MaritalStatus, Gender) %>%
+  summarise(
+    MeanIncome = mean(Income2017, na.rm = TRUE),
+    MedianIncome = median(Income2017, na.rm = TRUE),
+    Count = n(),
+    .groups = "drop"
+  )
+
+# Visualize income by gender and marital status
+ggplot(marital_income, aes(x = MaritalStatus, y = MeanIncome, fill = Gender)) +
+  geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.9) +
+  geom_text(
+    aes(label = paste0("$", format(round(MeanIncome, 0), big.mark = ","))),
+    position = position_dodge(0.8),
+    vjust = -0.5,
+    size = 3.5,
+    color = "black"
+  ) +
+  labs(
+    title = "Average Income by Gender and Marital Status",
+    subtitle = "Data from NLSY97 Survey (2017)",
+    x = "Marital Status",
+    y = "Mean Income (USD)",
+    fill = "Gender"
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) + # Add space above bars
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, face = "italic", hjust = 0.5),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(size = 10, angle = 45, hjust = 1),
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.y = element_line(color = "gray80", linetype = "dashed")
+  )
+```
+
+**Description/Discussion:** The chart shows average income by gender and marital status, with males consistently earning more across all categories. Married males earn the highest income (\$69,612), while widowed females earn the least (\$25,000). The gender gap is largest for married and widowed individuals, with smaller differences among separated and divorced groups. Overall, the data highlights persistent gender income disparities, particularly for married and widowed women.
+
+### 3.3 Regression output + interpretation of output + interpretation of coefficients
+
+```{r}
+# Run regression model
+regression_model <- lm(Income2017 ~ Gender + Education + MaritalStatus, data = nlsy97_cleaned)
+
+# Extract Coefficients
+coefficients <- summary(regression_model)$coefficients
+coefficients
+
+# Summary of the regression model
+library(broom)
+
+# Tidy regression output for better readability
+regression_summary <- tidy(regression_model)
+
+# Display regression summary in a well-designed table
+kable(regression_summary, format = "html", caption = "Regression Model Summary") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(height = "400px")
+
+# Create residual diagnostics table
+residuals_summary <- augment(regression_model) %>%
+  summarise(
+    Mean_Residuals = mean(.resid, na.rm = TRUE),
+    SD_Residuals = sd(.resid, na.rm = TRUE),
+    Min_Residuals = min(.resid, na.rm = TRUE),
+    Max_Residuals = max(.resid, na.rm = TRUE)
+  )
+
+# Display residual summary in a styled table
+kable(residuals_summary, format = "html", caption = "Residual Diagnostics Summary") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+```         
+•   Intercept: 
+- Estimate (35,572): The average income for the reference group (males who have not completed high school and have never been married) is $35,572.
+- The intercept provides the baseline income when all other variables are at their reference levels.
+•   Gender
+ - GenderFemale (-19,920): On average, females earn $19,920 less than males, holding all other variables constant. This difference is statistically                significant (p < 0.0001).
+•   Education
+  1.    High School Graduate (8,388): Individuals who completed high school earn $8,388 more, on average, than those with less than a high school education,            holding other variables constant. This is statistically significant (p < 0.0001).
+  2.    Associate’s Degree (17,949): Individuals with an associate’s degree earn $17,949 more, on average, than those with less than a high school education,           holding other variables constant. This is statistically significant (p < 0.0001).
+  3.    Bachelor’s Degree (35,083): Individuals with a bachelor’s degree earn $35,083 more, on average, than those with less than a high school education,              holding other variables constant. This is statistically significant (p < 0.0001).
+  4.    Graduate Degree (56,252): Individuals with a graduate degree earn $56,252 more, on average, than those with less than a high school education, holding          other variables constant. This is statistically significant (p < 0.0001).
+•   MaritalStatus
+1.  Married (11,418): Married individuals earn $11,418 more, on average, than never-married individuals, holding other variables constant. This is                  statistically significant (p < 0.0001).
+2.  Separated (2,763): Separated individuals earn $2,763 more, on average, than never-married individuals, holding other variables constant. This difference         is not statistically significant (p = 0.448).
+3.  Divorced (5,236): Divorced individuals earn $5,236 more, on average, than never-married individuals, holding other variables constant. This is                  statistically significant (p = 0.0045).
+4.  Widowed (747): Widowed individuals earn $747 more, on average, than never-married individuals, holding other variables constant. This difference is not         statistically significant (p = 0.935).
+•   Model Fit
+- Residual standard error (35,530): Indicates the variability in the income data that is not explained by the model.
+- Multiple R-squared (0.2368): About 23.68% of the variability in income is explained by the model.
+- Adjusted R-squared (0.2354): After adjusting for the number of predictors, the model explains about 23.54% of the variability in income.
+- F-statistic (162.5, p-value < 0.0001): The overall model is statistically significant, meaning that the predictors together explain a significant portion       of the variation in income.
+•   Key Insights
+1.  Gender plays a significant role in income differences, with females earning significantly less than males.
+2.  Education strongly impacts income, with higher educational attainment leading to substantially higher incomes.
+3.  Marital status also affects income, with married individuals earning significantly more than those never married.
+4.  Some marital statuses (e.g., separated, widowed) do not significantly affect income when controlling for other factors.
+```
+
+```{r}
+# Extract data for plotting
+diag_data <- augment(regression_model)
+
+# Residuals vs Fitted
+residuals_fitted <- ggplot(diag_data, aes(.fitted, .resid)) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs Fitted", x = "Fitted Values", y = "Residuals") +
+  theme_minimal()
+
+# Normal Q-Q Plot
+qq_plot <- ggplot(diag_data, aes(sample = .resid)) +
+  stat_qq(color = "steelblue") +
+  stat_qq_line(color = "red", linetype = "dashed") +
+  labs(title = "Normal Q-Q Plot", x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  theme_minimal()
+
+# Scale-Location Plot
+scale_location <- ggplot(diag_data, aes(.fitted, sqrt(abs(.std.resid)))) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  geom_smooth(se = FALSE, color = "red") +
+  labs(title = "Scale-Location", x = "Fitted Values", y = "√|Standardized Residuals|") +
+  theme_minimal()
+
+# Residuals vs Leverage
+residuals_leverage <- ggplot(diag_data, aes(.hat, .std.resid)) +
+  geom_point(alpha = 0.5, color = "steelblue") +
+  geom_smooth(se = FALSE, color = "red") +
+  geom_hline(yintercept = c(-3, 3), linetype = "dashed", color = "red") +
+  labs(title = "Residuals vs Leverage", x = "Leverage", y = "Standardized Residuals") +
+  theme_minimal()
+
+# Arrange the plots into a grid
+(residuals_fitted | qq_plot) / (scale_location | residuals_leverage)
+```
+
+Interpretation of Diagnostic Plots:
+
+```         
+•   Residuals vs Fitted: Checks for linearity and equal variance. A random scatter suggests the assumptions are met.
+•   Normal Q-Q: Assesses normality of residuals. Points should lie close to the diagonal line.
+•   Scale-Location: Examines homoscedasticity (constant variance). A horizontal line indicates equal variance.
+•   Residuals vs Leverage: Identifies influential observations. Points outside the red dashed lines may be highly influential.
+```
+
+### 3.4 Confidence Interval
+
+```{r}
+# Confidence Interval for Mean Income by Gender
+gender_income_summary <- nlsy97_cleaned %>%
+  group_by(Gender) %>%
+  summarize(
+    MeanIncome = round(mean(Income2017, na.rm = TRUE), 2),
+    SDIncome = round(sd(Income2017, na.rm = TRUE), 2),
+    SampleSize = n()
+  ) %>%
+  mutate(
+    SEIncome = round(SDIncome / sqrt(SampleSize), 2),
+    LowerCI = round(MeanIncome - qt(0.975, df = SampleSize - 1) * SEIncome, 2),
+    UpperCI = round(MeanIncome + qt(0.975, df = SampleSize - 1) * SEIncome, 2)
+  )
+
+# Create the table with enhanced design and center-aligned header
+knitr::kable(
+  gender_income_summary,
+  caption = "95% Confidence Interval for Mean Income by Gender",
+  col.names = c("Gender", "Mean Income", "SD", "Sample Size", "SE", "Lower CI", "Upper CI"),
+  align = "c" # Center-align all columns
+) %>%
+  kableExtra::kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = F,
+    position = "center"
+  ) %>%
+  kableExtra::column_spec(2:7, bold = T, color = "blue") %>% # Highlight numerical columns
+  kableExtra::row_spec(0, bold = T, color = "white", background = "gray", align = "center") # Center-align header row
+```
+
+**Description/Discussion:** The table highlights a significant gender income gap, with males earning a higher mean income (\$57,626.52) than females (\$41,429.41). Males also show greater income variability (SD: \$44,689.85 vs. \$33,904.93) and wider confidence intervals (\$55,848.04–\$59,405.00 for males vs. \$40,041.53–\$42,817.29 for females). The non-overlapping confidence intervals confirm the income difference is statistically significant. Despite similar sample sizes, this data underscores persistent gender disparities in earnings.
+
+```{r}
+ggplot(gender_income_summary, aes(x = Gender, y = MeanIncome, fill = Gender)) +
+  geom_col(position = position_dodge(0.8), width = 0.7, alpha = 0.9) +
+  geom_errorbar(
+    aes(ymin = LowerCI, ymax = UpperCI),
+    width = 0.2,
+    position = position_dodge(0.8),
+    color = "black"
+  ) +
+  geom_text(
+    aes(label = paste0("$", format(round(MeanIncome, 0), big.mark = ","))),
+    position = position_dodge(0.8),
+    vjust = -1.2, # Adjusted value to move text higher
+    size = 3.5,
+    color = "black"
+  ) +
+  labs(
+    title = "Mean Income and 95% Confidence Intervals by Gender",
+    subtitle = "Data from NLSY97 Survey (2017)",
+    x = "Gender",
+    y = "Mean Income (USD)",
+    fill = "Gender"
+  ) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) + # Add space above bars
+  theme_classic() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 12, face = "italic", hjust = 0.5),
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(size = 10, face = "bold"),
+    legend.position = "top",
+    legend.title = element_text(face = "bold"),
+    panel.grid.major.y = element_line(color = "gray80", linetype = "dashed")
+  )
+```
+
+**Description/Discussion:** The bar chart displays the mean income by gender with 95% confidence intervals. Males have a higher mean income (\$57,627) compared to females (\$41,429), and the non-overlapping confidence intervals confirm this difference is statistically significant. The error bars represent income variability, highlighting the persistent gender income gap.
+
+### 3.5 Hypothesis Test
+
+```{r, results="asis"}
+
+# Perform the two-sample t-test
+t_test_result <- t.test(Income2017 ~ Gender, data = nlsy97_cleaned, var.equal = TRUE)
+
+# Prepare the results for table format
+t_test_summary <- data.frame(
+  Metric = c("T-Statistic", "Degrees of Freedom", "Mean Difference", "95% Confidence Interval (Lower)", "95% Confidence Interval (Upper)", "P-Value", "Significance"),
+  Value = c(
+    round(t_test_result$statistic, 3),
+    t_test_result$parameter,
+    round(diff(t_test_result$estimate), 2),
+    round(t_test_result$conf.int[1], 2),
+    round(t_test_result$conf.int[2], 2),
+    formatC(t_test_result$p.value, format = "e", digits = 4),
+    ifelse(t_test_result$p.value < 0.05, "Significant", "Not Significant")
+  )
+)
+
+# Display the results as a table
+t_test_summary %>%
+  kable(
+    caption = "T-Test Results for Income by Gender",
+    col.names = c("Metric", "Value"),
+    align = "c"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  column_spec(2, bold = TRUE, color = "blue") %>% # Highlight the values column
+  row_spec(0, bold = TRUE, color = "white", background = "gray", align = "center") # Style header row
+
+
+# Display the summary table
+gender_income_summary %>%
+  kable(
+    caption = "Income Summary with Confidence Intervals by Gender",
+    col.names = c("Gender", "Mean Income", "SD", "Sample Size", "SE", "Lower CI", "Upper CI"),
+    align = "c"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  column_spec(2:7, bold = TRUE, color = "blue") %>% # Highlight numerical columns
+  row_spec(0, bold = TRUE, color = "white", background = "gray", align = "center") # Style header row
+
+```
+
+## 4. Conclusions and Discussion
+
+### 4.1 Main Findings
+
+1.  Gender Disparity: Male participants had significantly higher average incomes compared to female participants across all education levels and marital statuses.
+2.  Effect of Education: Income increased consistently with education level for both genders. However, the income gap between genders was present at every level of education.
+3.  Effect of Marital Status: Married individuals had higher incomes on average compared to other marital statuses. This trend was observed for both genders, though the gender gap persisted within each marital status category.
+
+### 4.2 Limitations
+
+1.  Topcoded Income: The truncation of the top 2% of incomes may underestimate income inequality, particularly at the upper end of the spectrum.
+2.  Sample Size Reduction: The exclusion of missing or invalid data reduced the sample size, potentially limiting generalizability.
+3.  Unaccounted Variables: Factors such as regional differences, job type, and hours worked were not included in the analysis due to data constraints.
+
+### 4.3 Confidence in Results
+
+The findings are supported by statistical tests and are consistent with broader trends in income inequality research. However, the topcoding and unaccounted variables introduce some uncertainty. While the analysis confidently highlights income disparities, additional data and controls could strengthen the conclusions.
+
+### 4.4 Policy Implications
+
+1.  Gender Equality: The persistent gender income gap highlights the need for workplace initiatives to ensure pay equity.
+2.  Education Access: Policies that promote higher education access could help reduce income inequality.
+3.  Marital Status Effects: Recognizing how marital status influences income could inform family-supportive economic policies.
+
+### 4.5 Believability of Models
+
+The regression diagnostics did not reveal significant issues such as non-normality or heteroscedasticity, supporting the reliability of the model. While there are limitations, the models provide a reasonable representation of the data and could be presented to policymakers with confidence, accompanied by a discussion of the noted limitations.
